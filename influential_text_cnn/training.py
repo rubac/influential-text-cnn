@@ -9,6 +9,7 @@ Handles model training with:
 """
 
 import torch
+import torch.nn.functional as F
 import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
 from typing import Optional, Dict, List, Tuple
@@ -204,7 +205,13 @@ class Trainer:
             history.conv_l2.append(sum(epoch_conv_l2) / n_train)
             history.act_reg.append(sum(epoch_act_reg) / n_train)
             history.out_l1.append(sum(epoch_out_l1) / n_train)
-            history.train_acc.append(epoch_correct / n_train)
+
+            if self.model.task == "binary":
+                history.train_acc.append(epoch_correct / n_train)
+            else:
+                # For continuous outcomes, track negative MSE as "accuracy"
+                # (higher is better, for consistent early-stopping logic)
+                history.train_acc.append(-sum(epoch_bce) / n_train)
 
             # --- Validate ---
             self.model.eval()
@@ -227,12 +234,23 @@ class Trainer:
                     batch_size = emb_batch.size(0)
                     val_losses.append(loss_dict['total_loss'].item() * batch_size)
 
-                    preds_binary = (output['predictions'].squeeze() > 0.5).float()
-                    val_correct += (preds_binary == label_batch).sum().item()
+                    if self.model.task == "binary":
+                        preds_binary = (output['predictions'].squeeze() > 0.5).float()
+                        val_correct += (preds_binary == label_batch).sum().item()
+                    else:
+                        # Accumulate MSE contribution for continuous
+                        mse_contrib = F.mse_loss(
+                            output['predictions'].squeeze(), label_batch,
+                            reduction='sum'
+                        ).item()
+                        val_correct += mse_contrib  # reused as sum-of-squared-error
                     val_total += batch_size
 
             val_loss = sum(val_losses) / val_total
-            val_acc = val_correct / val_total
+            if self.model.task == "binary":
+                val_acc = val_correct / val_total
+            else:
+                val_acc = -(val_correct / val_total)  # negative MSE
             history.val_loss.append(val_loss)
             history.val_acc.append(val_acc)
 
@@ -246,14 +264,24 @@ class Trainer:
                 patience_counter += 1
 
             if self.verbose and (epoch % 10 == 0 or epoch == self.epochs - 1):
-                logger.info(
-                    f"Epoch {epoch:3d} | "
-                    f"Train Loss: {history.train_loss[-1]:.4f} "
-                    f"(BCE: {history.bce[-1]:.4f}) | "
-                    f"Val Loss: {val_loss:.4f} | "
-                    f"Train Acc: {history.train_acc[-1]:.3f} | "
-                    f"Val Acc: {val_acc:.3f}"
-                )
+                if self.model.task == "binary":
+                    logger.info(
+                        f"Epoch {epoch:3d} | "
+                        f"Train Loss: {history.train_loss[-1]:.4f} "
+                        f"(BCE: {history.bce[-1]:.4f}) | "
+                        f"Val Loss: {val_loss:.4f} | "
+                        f"Train Acc: {history.train_acc[-1]:.3f} | "
+                        f"Val Acc: {val_acc:.3f}"
+                    )
+                else:
+                    logger.info(
+                        f"Epoch {epoch:3d} | "
+                        f"Train Loss: {history.train_loss[-1]:.4f} "
+                        f"(MSE: {history.bce[-1]:.4f}) | "
+                        f"Val Loss: {val_loss:.4f} | "
+                        f"Train MSE: {-history.train_acc[-1]:.4f} | "
+                        f"Val MSE: {-val_acc:.4f}"
+                    )
 
             if patience_counter >= self.patience:
                 if self.verbose:
@@ -285,7 +313,8 @@ class Trainer:
         """
         Evaluate model on a dataset.
 
-        Returns dict with 'accuracy', 'f1', 'precision', 'recall'.
+        For binary tasks: returns 'accuracy', 'f1', 'precision', 'recall'.
+        For continuous tasks: returns 'mse', 'rmse', 'r2', 'mae'.
         """
         self.model.eval()
         dataset = TensorDataset(
@@ -301,25 +330,37 @@ class Trainer:
             for emb_batch, label_batch in loader:
                 emb_batch = emb_batch.to(self.device)
                 output = self.model(emb_batch)
-                preds = (output['predictions'].squeeze() > 0.5).cpu().numpy()
-                all_preds.append(preds)
+                all_preds.append(output['predictions'].squeeze().cpu().numpy())
                 all_labels.append(label_batch.numpy())
 
         preds = np.concatenate(all_preds).ravel()
         labels = np.concatenate(all_labels).ravel()
 
-        acc = np.mean(preds == labels)
-        tp = np.sum((preds == 1) & (labels == 1))
-        fp = np.sum((preds == 1) & (labels == 0))
-        fn = np.sum((preds == 0) & (labels == 1))
+        if self.model.task == "continuous":
+            mse = float(np.mean((preds - labels) ** 2))
+            ss_res = np.sum((labels - preds) ** 2)
+            ss_tot = np.sum((labels - labels.mean()) ** 2)
+            r2 = 1 - ss_res / max(ss_tot, 1e-8)
+            return {
+                'mse': mse,
+                'rmse': float(np.sqrt(mse)),
+                'r2': float(r2),
+                'mae': float(np.mean(np.abs(preds - labels))),
+            }
+        else:
+            preds_binary = (preds > 0.5).astype(float)
+            acc = np.mean(preds_binary == labels)
+            tp = np.sum((preds_binary == 1) & (labels == 1))
+            fp = np.sum((preds_binary == 1) & (labels == 0))
+            fn = np.sum((preds_binary == 0) & (labels == 1))
 
-        precision = tp / max(tp + fp, 1)
-        recall = tp / max(tp + fn, 1)
-        f1 = 2 * precision * recall / max(precision + recall, 1e-8)
+            precision = tp / max(tp + fp, 1)
+            recall = tp / max(tp + fn, 1)
+            f1 = 2 * precision * recall / max(precision + recall, 1e-8)
 
-        return {
-            'accuracy': float(acc),
-            'precision': float(precision),
-            'recall': float(recall),
-            'f1': float(f1),
-        }
+            return {
+                'accuracy': float(acc),
+                'precision': float(precision),
+                'recall': float(recall),
+                'f1': float(f1),
+            }

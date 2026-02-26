@@ -44,16 +44,20 @@ class InfluentialTextCNN(nn.Module):
         num_filters: int = 8,
         kernel_sizes: Optional[List[int]] = None,
         dropout: float = 0.0,
+        task: str = "binary",
     ):
         super().__init__()
         if kernel_sizes is None:
             kernel_sizes = [5]
+        if task not in ("binary", "continuous"):
+            raise ValueError(f"task must be 'binary' or 'continuous', got '{task}'")
 
         self.embedding_dim = embedding_dim
         self.num_filters = num_filters
         self.kernel_sizes = sorted(kernel_sizes)
         self.num_conv_layers = len(kernel_sizes)
         self.dropout_rate = dropout
+        self.task = task
 
         # M parallel 1D convolutional layers
         self.conv_layers = nn.ModuleList([
@@ -114,7 +118,12 @@ class InfluentialTextCNN(nn.Module):
         # Output layer
         dropped = self.dropout(pooled_concat)
         logits = self.output_layer(dropped)  # (B, 1)
-        predictions = torch.sigmoid(logits)
+
+        if self.task == "binary":
+            predictions = torch.sigmoid(logits)
+        else:
+            # Continuous: raw output, no activation
+            predictions = logits
 
         result = {
             'logits': logits,
@@ -151,7 +160,11 @@ class InfluentialTextCNN(nn.Module):
 
 class InfluentialTextLoss(nn.Module):
     """
-    Custom loss function combining BCE with three regularization terms.
+    Custom loss function combining a data-fidelity term with three
+    regularization terms.
+
+    For binary outcomes the data-fidelity term is BCE; for continuous
+    outcomes it is MSE.
 
     Args:
         model: The InfluentialTextCNN model instance.
@@ -160,7 +173,8 @@ class InfluentialTextLoss(nn.Module):
             between filter activations (encourages diverse filters).
         lambda_out_ker: L1 penalty strength on output layer weights.
         pos_weight: Optional positive class weight for BCE (scalar).
-            Use for class-imbalanced outcomes.
+            Use for class-imbalanced outcomes.  Ignored when task='continuous'.
+        task: 'binary' (BCE loss) or 'continuous' (MSE loss).
     """
 
     def __init__(
@@ -170,6 +184,7 @@ class InfluentialTextLoss(nn.Module):
         lambda_conv_act: float = 3.0,
         lambda_out_ker: float = 0.0001,
         pos_weight: Optional[float] = None,
+        task: Optional[str] = None,
     ):
         super().__init__()
         self.model = model
@@ -177,6 +192,7 @@ class InfluentialTextLoss(nn.Module):
         self.lambda_conv_act = lambda_conv_act
         self.lambda_out_ker = lambda_out_ker
         self.pos_weight = pos_weight
+        self.task = task or model.task  # inherit from model if not specified
 
     def forward(
         self,
@@ -198,19 +214,25 @@ class InfluentialTextLoss(nn.Module):
         """
         device = predictions.device
         targets = targets.float().view(-1, 1)
-        preds = predictions.clamp(1e-7, 1 - 1e-7)
 
-        # 1) Binary cross-entropy (optionally weighted)
-        if self.pos_weight is not None:
-            pw = torch.tensor([self.pos_weight], device=device)
-            bce = F.binary_cross_entropy_with_logits(
-                # We need logits; recover them from clamped predictions
-                torch.logit(preds),
-                targets,
-                pos_weight=pw,
-            )
+        # 1) Data-fidelity term
+        if self.task == "continuous":
+            # Mean squared error for continuous outcomes
+            data_loss = F.mse_loss(predictions, targets)
         else:
-            bce = F.binary_cross_entropy(preds.squeeze(1), targets.squeeze(1))
+            # Binary cross-entropy for binary outcomes
+            preds = predictions.clamp(1e-7, 1 - 1e-7)
+            if self.pos_weight is not None:
+                pw = torch.tensor([self.pos_weight], device=device)
+                data_loss = F.binary_cross_entropy_with_logits(
+                    torch.logit(preds),
+                    targets,
+                    pos_weight=pw,
+                )
+            else:
+                data_loss = F.binary_cross_entropy(
+                    preds.squeeze(1), targets.squeeze(1)
+                )
 
         # 2) L2 on conv weights: Σ (W^conv_{k,d,f})^2
         conv_l2 = torch.tensor(0.0, device=device)
@@ -231,11 +253,12 @@ class InfluentialTextLoss(nn.Module):
         if self.lambda_out_ker > 0:
             out_l1 = self.lambda_out_ker * self.model.output_layer.weight.abs().sum()
 
-        total = bce + conv_l2 + act_reg + out_l1
+        total = data_loss + conv_l2 + act_reg + out_l1
 
         return {
             'total_loss': total,
-            'bce': bce,
+            'data_loss': data_loss,
+            'bce': data_loss,  # backward-compatible alias
             'conv_l2': conv_l2,
             'act_reg': act_reg,
             'out_l1': out_l1,

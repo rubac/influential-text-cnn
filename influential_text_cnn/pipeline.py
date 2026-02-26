@@ -113,6 +113,8 @@ class InfluentialTextPipeline:
         # Embedding options
         precomputed_embeddings: Optional[np.ndarray] = None,
         precomputed_tokens: Optional[List[List[str]]] = None,
+        # Task type
+        task: str = "binary",
         # Tuning options
         tune: bool = True,
         param_grid: Optional[Dict[str, List]] = None,
@@ -141,10 +143,12 @@ class InfluentialTextPipeline:
 
         Args:
             texts: List of N text strings.
-            labels: (N,) binary outcome labels.
+            labels: (N,) outcome labels.  Binary (0/1) when task='binary',
+                any float when task='continuous'.
             precomputed_embeddings: Optional (N, U, D) array to skip BERT.
             precomputed_tokens: Optional list of token lists (if using
                 precomputed embeddings).
+            task: 'binary' for classification or 'continuous' for regression.
             tune: Whether to perform hyperparameter tuning.
             param_grid: Custom parameter grid for tuning.
             n_folds: Number of CV folds for tuning.
@@ -205,14 +209,24 @@ class InfluentialTextPipeline:
         train_texts = [texts[i] for i in train_idx]
         test_texts = [texts[i] for i in test_idx]
 
-        logger.info(
-            f"  Train: {len(train_idx)} samples "
-            f"({train_labels.mean():.2%} positive)"
-        )
-        logger.info(
-            f"  Test: {len(test_idx)} samples "
-            f"({test_labels.mean():.2%} positive)"
-        )
+        if task == "binary":
+            logger.info(
+                f"  Train: {len(train_idx)} samples "
+                f"({train_labels.mean():.2%} positive)"
+            )
+            logger.info(
+                f"  Test: {len(test_idx)} samples "
+                f"({test_labels.mean():.2%} positive)"
+            )
+        else:
+            logger.info(
+                f"  Train: {len(train_idx)} samples "
+                f"(mean={train_labels.mean():.3f}, sd={train_labels.std():.3f})"
+            )
+            logger.info(
+                f"  Test: {len(test_idx)} samples "
+                f"(mean={test_labels.mean():.3f}, sd={test_labels.std():.3f})"
+            )
 
         # ===== Step 3: Hyperparameter tuning (optional) =====
         if tune:
@@ -226,6 +240,7 @@ class InfluentialTextPipeline:
                 batch_size=batch_size,
                 patience=patience,
                 device=self.device,
+                task=task,
             )
             result.tuning_report = tuning_report
             best = tuning_report.best_params
@@ -248,6 +263,7 @@ class InfluentialTextPipeline:
             embedding_dim=embedding_dim,
             num_filters=num_filters,
             kernel_sizes=kernel_sizes,
+            task=task,
         )
         loss_fn = InfluentialTextLoss(
             model=model,

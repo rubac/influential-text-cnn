@@ -119,13 +119,14 @@ def tune_hyperparameters(
     patience: int = 15,
     device: str = "cpu",
     selection_method: str = "combined",
+    task: str = "binary",
 ) -> TuningReport:
     """
     Perform hyperparameter tuning via k-fold cross-validation.
 
     Args:
         embeddings: (N, U, D) training set embeddings.
-        labels: (N,) binary labels.
+        labels: (N,) outcome labels.
         param_grid: Dict mapping parameter names to lists of values.
             If None, uses DEFAULT_PARAM_GRID.
         n_folds: Number of CV folds (paper uses 5).
@@ -134,6 +135,7 @@ def tune_hyperparameters(
         patience: Early stopping patience.
         device: Device string.
         selection_method: 'combined' (acc + diversity), 'accuracy', or 'loss'.
+        task: 'binary' or 'continuous'.
 
     Returns:
         TuningReport with best parameters and all results.
@@ -164,9 +166,14 @@ def tune_hyperparameters(
     )
 
     # Create CV folds
-    from sklearn.model_selection import StratifiedKFold
-    kfold = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
-    fold_indices = list(kfold.split(embeddings, labels))
+    if task == "binary":
+        from sklearn.model_selection import StratifiedKFold
+        kfold = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+        fold_indices = list(kfold.split(embeddings, labels))
+    else:
+        from sklearn.model_selection import KFold
+        kfold = KFold(n_splits=n_folds, shuffle=True, random_state=42)
+        fold_indices = list(kfold.split(embeddings))
 
     all_results = []
 
@@ -192,6 +199,7 @@ def tune_hyperparameters(
                     embedding_dim=embedding_dim,
                     num_filters=nf,
                     kernel_sizes=ks,
+                    task=task,
                 )
                 loss_fn = InfluentialTextLoss(
                     model=model,

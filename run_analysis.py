@@ -59,6 +59,11 @@ LAMBDA_CONV_KER = 0.001        # L2 on conv weights
 LAMBDA_CONV_ACT = 3.0          # Filter diversity penalty
 LAMBDA_OUT_KER  = 0.0001       # L1 on output weights
 
+# Task type:
+#   "binary"     — outcome is 0/1 (uses BCE loss, reports accuracy/F1)
+#   "continuous"  — outcome is any number (uses MSE loss, reports R²/RMSE)
+TASK = "binary"
+
 # =============================================================================
 # (No changes needed below this line)
 # =============================================================================
@@ -85,9 +90,11 @@ def main():
     texts  = df[TEXT_COLUMN].astype(str).tolist()
     labels = df[OUTCOME_COLUMN].values.astype(float)
 
-    unique = set(np.unique(labels))
-    if not unique.issubset({0.0, 1.0}):
-        sys.exit(f"ERROR: Outcome must be 0/1. Found: {unique}")
+    # Validate outcome
+    if TASK == "binary":
+        unique = set(np.unique(labels))
+        if not unique.issubset({0.0, 1.0}):
+            sys.exit(f"ERROR: For task='binary', outcome must be 0/1. Found: {unique}")
 
     # Drop empties
     valid = [len(t.strip()) > 0 for t in texts]
@@ -109,6 +116,7 @@ def main():
     result = pipeline.run(
         texts=texts,
         labels=labels,
+        task=TASK,
         tune=False,
         num_filters=NUM_FILTERS,
         kernel_sizes=KERNEL_SIZES,
