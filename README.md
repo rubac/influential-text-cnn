@@ -2,7 +2,7 @@
 
 A Python implementation of the CNN-based method for discovering influential text features, as described in:
 
-> Ayers, Sanford, Roberts & Yang (2024). **"Discovering influential text using convolutional neural networks."** *Findings of the Association for Computational Linguistics: ACL 2024*, pp. 12002–12027. [[Paper]](https://aclanthology.org/2024.findings-acl.713/)
+> Ayers, Sanford, Roberts & Yang (2024). **"Discovering influential text using convolutional neural networks."** *Findings of the Association for Computational Linguistics: ACL 2024*, pp. 12002–12027. [[Paper]](https://aclanthology.org/2024.findings-acl.714/)
 
 ## What this does
 
