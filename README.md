@@ -211,7 +211,7 @@ If you use this code, please cite the original paper:
     booktitle = "Findings of the Association for Computational Linguistics: ACL 2024",
     year      = "2024",
     pages     = "12002--12027",
-    url       = "https://aclanthology.org/2024.findings-acl.713",
+    url       = "https://aclanthology.org/2024.findings-acl.714",
 }
 ```
 
