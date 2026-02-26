@@ -49,7 +49,7 @@ cd influential-text-cnn
 pip install -r requirements.txt
 ```
 
-**Apple Silicon (M1/M2/M3):** The default `pip install torch` includes MPS (GPU) support. The pipeline auto-detects your GPU.
+**Apple Silicon (M1/M2/...):** The default `pip install torch` includes MPS (GPU) support. The pipeline auto-detects your GPU.
 
 **NVIDIA GPU:** See [PyTorch install instructions](https://pytorch.org/get-started/locally/) for your CUDA version.
 
@@ -108,13 +108,6 @@ The main output is `results/filter_interpretations.csv`. Each row is a learned f
 | `ci_lower`, `ci_upper` | 95% bootstrap confidence interval |
 | `is_active` | Whether the filter learned a meaningful pattern |
 | `top_phrase_1`–`5` | Most strongly activating phrases |
-
-**In R:**
-```r
-results <- read.csv("results/filter_interpretations.csv")
-results <- results[order(-abs(results$output_weight)), ]
-head(results)
-```
 
 ## Reproducing the paper's applications
 
