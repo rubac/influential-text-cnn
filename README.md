@@ -44,7 +44,7 @@ where max(R) penalizes the maximum positive pairwise correlation between filter 
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/influential-text-cnn.git
+git clone https://github.com/rubac/influential-text-cnn.git
 cd influential-text-cnn
 pip install -r requirements.txt
 ```
