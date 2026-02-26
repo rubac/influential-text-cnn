@@ -110,7 +110,7 @@ The main output is `results/filter_interpretations.csv`. Each row is a learned f
 | `top_phrase_1`–`5` | Most strongly activating phrases |
 
 ## Reproducing the paper's applications
-
+Please note that the data needs to be accessed through the procedure described in the original paper.
 ### Weibo censorship (Section 5.1)
 
 ```python
