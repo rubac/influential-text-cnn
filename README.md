@@ -65,7 +65,7 @@ You need a CSV with a text column and a binary (0/1) outcome column:
 ### 3. Run
 `run_analysis.py`
 
-# Print discovered text treatments
+#### Print discovered text treatments
 ```
 InfluentialTextPipeline.print_summary(result)
 ```
