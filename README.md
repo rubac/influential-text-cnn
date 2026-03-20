@@ -63,35 +63,7 @@ You need a CSV with a text column and a binary (0/1) outcome column:
 | I received great service today... | 1 |
 
 ### 3. Run
-
-**Option A — Edit the script:**
-
-Open `run_analysis.py`, change the three lines at the top, and run:
-
-```bash
-python run_analysis.py
-```
-
-**Option B — Use the notebook:**
-
-Open `notebooks/tutorial.ipynb` in Jupyter for a step-by-step walkthrough.
-
-**Option C — Use in your own code:**
-
-```python
-from influential_text_cnn import InfluentialTextPipeline
-
-pipeline = InfluentialTextPipeline(
-    model_name="prajjwal1/bert-tiny",
-    max_tokens=150,
-)
-
-result = pipeline.run(
-    texts=texts,
-    labels=labels,
-    num_filters=8,
-    kernel_sizes=[5, 7],
-)
+`run_analysis.py`
 
 # Print discovered text treatments
 InfluentialTextPipeline.print_summary(result)
@@ -108,38 +80,6 @@ The main output is `results/filter_interpretations.csv`. Each row is a learned f
 | `ci_lower`, `ci_upper` | 95% bootstrap confidence interval |
 | `is_active` | Whether the filter learned a meaningful pattern |
 | `top_phrase_1`–`5` | Most strongly activating phrases |
-
-## Reproducing the paper's applications
-Please note that the data needs to be accessed through the procedure described in the original paper.
-### Weibo censorship (Section 5.1)
-
-```python
-pipeline = InfluentialTextPipeline(
-    model_name="hfl/chinese-roberta-wwm-ext",
-    max_tokens=150,
-)
-result = pipeline.run(
-    texts=weibo_texts, labels=censorship_labels,
-    num_filters=8, kernel_sizes=[5, 7],
-    lambda_conv_ker=0.001, lambda_conv_act=3.0,
-    lambda_out_ker=0.0001, learning_rate=0.0001,
-)
-```
-
-### CFPB complaints (Section 5.2)
-
-```python
-pipeline = InfluentialTextPipeline(
-    model_name="prajjwal1/bert-tiny",
-    max_tokens=250,
-)
-result = pipeline.run(
-    texts=complaint_texts, labels=timely_response,
-    num_filters=16, kernel_sizes=[5],
-    lambda_conv_ker=0.0, lambda_conv_act=0.5,
-    lambda_out_ker=0.001, learning_rate=0.001,
-)
-```
 
 ## Hyperparameter tuning
 
@@ -170,8 +110,6 @@ influential-text-cnn/
 │   ├── benchmarks.py           # Regularized logistic regression baseline
 │   ├── pipeline.py             # End-to-end pipeline
 │   └── visualization.py        # Plotting utilities
-├── notebooks/
-│   └── tutorial.ipynb          # Step-by-step tutorial
 ├── run_analysis.py             # Simple script entry point
 ├── requirements.txt
 ├── LICENSE
