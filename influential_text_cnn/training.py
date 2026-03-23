@@ -330,7 +330,7 @@ class Trainer:
             for emb_batch, label_batch in loader:
                 emb_batch = emb_batch.to(self.device)
                 output = self.model(emb_batch)
-                all_preds.append(output['predictions'].squeeze().cpu().numpy())
+                all_preds.append(output['predictions'].squeeze(-1).cpu().numpy())
                 all_labels.append(label_batch.numpy())
 
         preds = np.concatenate(all_preds).ravel()
