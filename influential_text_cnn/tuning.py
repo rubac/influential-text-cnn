@@ -227,7 +227,11 @@ def tune_hyperparameters(
 
                 # Evaluate
                 metrics = trainer.evaluate(embeddings[val_idx], labels[val_idx])
-                fold_accs.append(metrics['accuracy'])
+                if task == "binary":
+                    fold_accs.append(metrics['accuracy'])
+                else:
+                    # For continuous: use negative MSE (higher is better)
+                    fold_accs.append(-metrics['mse'])
                 fold_losses.append(history.best_val_loss)
 
                 # Count useful filters and correlation
