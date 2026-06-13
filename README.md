@@ -63,12 +63,37 @@ You need a CSV with a text column and a binary (0/1) outcome column:
 | I received great service today... | 1 |
 
 ### 3. Run
-`run_analysis.py`
 
-#### Print discovered text treatments
+**Option A — no coding.** Open `run_analysis.py`, edit the three lines at the
+top (your file path, the text column, the outcome column), then run:
+
+```bash
+python run_analysis.py
 ```
+
+It prints a summary and writes everything to `results/`.
+
+**Option B — from Python.** If you prefer to drive it yourself:
+
+```python
+import pandas as pd
+from influential_text_cnn import InfluentialTextPipeline
+
+df = pd.read_csv("your_data.csv")
+
+pipeline = InfluentialTextPipeline(model_name="prajjwal1/bert-tiny", max_tokens=150)
+result = pipeline.run(
+    texts=df["text"].tolist(),
+    labels=df["outcome"].to_numpy(),
+    task="binary",        # or "continuous" for a numeric outcome
+    tune=False,           # leave False unless you have CPU-hours to spare
+)
+
 InfluentialTextPipeline.print_summary(result)
 ```
+
+New here? The step-by-step [GETTING_STARTED.md](GETTING_STARTED.md) walks
+through the same workflow with no prior PyTorch experience assumed.
 
 ### 4. Interpret results
 
@@ -81,6 +106,31 @@ The main output is `results/filter_interpretations.csv`. Each row is a learned f
 | `ci_lower`, `ci_upper` | 95% bootstrap confidence interval |
 | `is_active` | Whether the filter learned a meaningful pattern |
 | `top_phrase_1`–`5` | Most strongly activating phrases |
+
+### Reading a row, in plain terms
+
+Think of each **filter** as a learned "phrase detector." During training the CNN
+discovers a handful of distinct phrase patterns; each row of the CSV is one of them.
+To understand a filter, read its `top_phrase_*` columns — those are the actual snippets
+from your corpus that fired it most strongly. That tells you *what* the pattern is.
+
+- **`output_weight`** — the sign tells you the direction of association. Positive means
+  texts containing this pattern are more likely to have `outcome = 1` (or a higher value,
+  for continuous outcomes); negative means the opposite. Magnitude is on the model's
+  internal scale, so treat it as a ranking, not an interpretable effect size.
+- **`treatment_effect` + `ci_lower`/`ci_upper`** — an OLS estimate (with a 95% bootstrap
+  CI) of how much the outcome shifts when the pattern is present, computed on a held-out
+  test set. If the CI excludes 0, the association is statistically distinguishable from
+  zero *in this sample*.
+- **`is_active`** — `False` means the filter never learned a meaningful pattern (its
+  activations barely vary). Ignore inactive rows.
+
+> **Causal caveat.** The "treatment effect" is only a *causal* effect under the strong
+> assumptions in Section 3 of the paper. In practice the intended workflow is
+> **discovery, not confirmation**: use this method to surface candidate phrasings, then
+> test the promising ones in a designed experiment (e.g. a survey experiment where you
+> manipulate the phrase). Two filters can also be correlated with each other and with
+> confounders, so read the discovered patterns as hypotheses.
 
 ## Hyperparameter tuning
 
@@ -119,9 +169,13 @@ influential-text-cnn/
 
 ## Key parameters
 
-| Parameter | Default | Description |
+The values below are the recommended starting points used by `run_analysis.py`
+and the tutorial notebook. The first two are set on `InfluentialTextPipeline(...)`;
+the rest are passed to `pipeline.run(...)`.
+
+| Parameter | Recommended | Description |
 |---|---|---|
-| `bert_model` | `prajjwal1/bert-tiny` | HuggingFace BERT model for embeddings |
+| `model_name` | `prajjwal1/bert-tiny` | HuggingFace BERT model for embeddings |
 | `max_tokens` | 150 | Max tokens per text (increase for longer docs) |
 | `num_filters` | 8 | Filters per conv layer (4, 8, or 16) |
 | `kernel_sizes` | `[5, 7]` | Phrase lengths in tokens |

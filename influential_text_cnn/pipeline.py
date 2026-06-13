@@ -67,7 +67,7 @@ class InfluentialTextPipeline:
         result = pipeline.run(
             texts=texts,
             labels=labels,
-            tune=True,
+            tune=False,   # set True to grid-search hyperparameters (slow)
         )
 
         # Print summary table
@@ -120,7 +120,7 @@ class InfluentialTextPipeline:
         # Task type
         task: str = "binary",
         # Tuning options
-        tune: bool = True,
+        tune: bool = False,
         param_grid: Optional[Dict[str, List]] = None,
         n_folds: int = 5,
         # Model options (used if tune=False)
@@ -129,7 +129,7 @@ class InfluentialTextPipeline:
         lambda_conv_ker: float = 0.001,
         lambda_conv_act: float = 3.0,
         lambda_out_ker: float = 0.0001,
-        learning_rate: float = 0.0001,
+        learning_rate: float = 0.001,
         # Training options
         epochs: int = 100,
         batch_size: int = 32,
@@ -153,7 +153,9 @@ class InfluentialTextPipeline:
             precomputed_tokens: Optional list of token lists (if using
                 precomputed embeddings).
             task: 'binary' for classification or 'continuous' for regression.
-            tune: Whether to perform hyperparameter tuning.
+            tune: Whether to perform hyperparameter tuning.  Default False;
+                tuning runs a k-fold CV grid search and is very slow (the
+                paper reports hundreds of CPU-hours).  Start with False.
             param_grid: Custom parameter grid for tuning.
             n_folds: Number of CV folds for tuning.
             num_filters: Filters per conv layer (if tune=False).
